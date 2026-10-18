@@ -98,6 +98,9 @@
       </div>
       <h2 class="font-display text-3xl font-bold text-white mt-4">¡Caso enviado!</h2>
       <p class="text-slate-400 mt-2">Gracias. El staff lo revisará lo antes posible.</p>
+      <p class="text-xs uppercase tracking-wider text-slate-500 mt-6">Tu número de caso</p>
+      <div id="numero" class="mt-1 inline-block rounded-lg bg-base border border-line px-6 py-2 font-display text-5xl font-bold text-fx"></div>
+      <p class="text-sm text-slate-400 mt-3">Guárdalo por si necesitas consultar el caso con el staff.</p>
       <button id="otro" class="mt-6 rounded-lg border border-line hover:bg-raised px-5 py-2.5 text-sm font-medium">Enviar otro caso</button>
     </div>
   </div>
@@ -107,7 +110,6 @@
 // ================= CONFIGURACIÓN (la misma que el panel) =================
 const SUPABASE_URL = "https://lpflycvomagkudyqsaug.supabase.co";
 const SUPABASE_KEY = "sb_publishable_LEkhPHD4mKJJFzIbPXBNeQ_e06arFQx";
-const TABLA = "reportes";
 const ESPERA_SEG = 30;          // tiempo mínimo entre envíos desde el mismo navegador
 // =========================================================================
 
@@ -139,16 +141,20 @@ $("form").addEventListener("submit", async e => {
   if (resta > 0) return mostrarAviso("Espera " + resta + " s antes de enviar otro caso.");
 
   $("enviar").disabled = true; $("enviar").textContent = "Enviando…";
-  const { error } = await db.from(TABLA).insert(datos);
+  const { data: numero, error } = await db.rpc("enviar_caso", {
+    p_usuario: datos.usuario_discord, p_tipo: datos.tipo_reporte, p_titulo: datos.titulo,
+    p_descripcion: datos.descripcion, p_pruebas: datos.pruebas
+  });
   $("enviar").disabled = false; $("enviar").textContent = "Enviar caso";
 
   if (error) {
     console.error(error);
-    return mostrarAviso(error.code === "42501"
-      ? "No se pudo enviar: falta el permiso de inserción en Supabase (mira el SQL que te di)."
+    return mostrarAviso(error.code === "PGRST202" || error.code === "42501"
+      ? "No se pudo enviar: falta crear la función en Supabase (ejecuta supabase.sql)."
       : "No se pudo enviar el caso: " + error.message);
   }
   try { localStorage.setItem("ultimo_envio", String(Date.now())); } catch (_) {}
+  $("numero").textContent = "#" + numero;
   $("form").classList.add("hidden"); $("exito").classList.remove("hidden");
   window.scrollTo({ top: 0, behavior: "smooth" });
 });
