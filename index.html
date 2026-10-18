@@ -41,6 +41,11 @@
 
     <div id="error" class="hidden mb-5 rounded-lg border border-red-500/40 bg-red-500/10 text-red-200 text-sm px-4 py-3"></div>
 
+    <div id="borrador" class="hidden mb-5 flex items-center justify-between gap-3 rounded-lg border border-line bg-panel/80 px-4 py-3 text-sm" role="status">
+      <span class="text-slate-300">Hemos recuperado tu borrador.</span>
+      <button id="borrador-no" type="button" class="whitespace-nowrap text-fx hover:underline">Descartar</button>
+    </div>
+
     <!-- FORMULARIO -->
     <form id="form" class="rounded-2xl border border-line bg-panel/80 backdrop-blur p-5 sm:p-8 space-y-6" novalidate>
       <div>
@@ -92,7 +97,7 @@
     </form>
 
     <!-- ÉXITO -->
-    <div id="exito" class="hidden rounded-2xl border border-emerald-500/40 bg-panel/80 p-8 text-center">
+    <div id="exito" tabindex="-1" class="hidden rounded-2xl border border-emerald-500/40 bg-panel/80 p-8 text-center focus:outline-none">
       <div class="mx-auto w-14 h-14 rounded-full bg-emerald-500/15 grid place-items-center text-emerald-400">
         <svg viewBox="0 0 24 24" class="w-8 h-8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
       </div>
@@ -101,7 +106,8 @@
       <p class="text-xs uppercase tracking-wider text-slate-500 mt-6">Tu número de caso</p>
       <div id="numero" class="mt-1 inline-block rounded-lg bg-base border border-line px-6 py-2 font-display text-5xl font-bold text-fx"></div>
       <p class="text-sm text-slate-400 mt-3">Guárdalo por si necesitas consultar el caso con el staff.</p>
-      <button id="otro" class="mt-6 rounded-lg border border-line hover:bg-raised px-5 py-2.5 text-sm font-medium">Enviar otro caso</button>
+      <button id="copiar" type="button" class="mt-4 rounded-lg border border-line hover:bg-raised px-4 py-2 text-sm font-medium">Copiar número</button>
+      <button id="otro" class="mt-6 block mx-auto rounded-lg border border-line hover:bg-raised px-5 py-2.5 text-sm font-medium">Enviar otro caso</button>
     </div>
   </div>
 </div>
@@ -110,14 +116,56 @@
 // ================= CONFIGURACIÓN (la misma que el panel) =================
 const SUPABASE_URL = "https://lpflycvomagkudyqsaug.supabase.co";
 const SUPABASE_KEY = "sb_publishable_LEkhPHD4mKJJFzIbPXBNeQ_e06arFQx";
-const ESPERA_SEG = 30;          // tiempo mínimo entre envíos desde el mismo navegador
+const ESPERA_SEG = 30;          // solo cortesía en el navegador: el límite real lo aplica el servidor (función enviar_caso)
+const CLAVE_BORRADOR = "borrador_caso";
 // =========================================================================
 
 const $ = id => document.getElementById(id);
 const db = supabase.createClient(SUPABASE_URL.trim().replace(/\/+$/, ""), SUPABASE_KEY.trim());
 
+const CAMPOS = ["usuario", "titulo", "descripcion", "pruebas"];
+const radios = () => [...document.querySelectorAll('input[name="tipo"]')];
+const tipoActual = () => (radios().find(r => r.checked) || radios()[0]).value;
+const actualizarContador = () => { $("contador").textContent = $("descripcion").value.length + " / 2000"; };
 const mostrarAviso = t => { $("aviso").textContent = t; $("aviso").classList.toggle("hidden", !t); };
-$("descripcion").addEventListener("input", e => $("contador").textContent = e.target.value.length + " / 2000");
+$("descripcion").addEventListener("input", actualizarContador);
+
+// ---------- Borrador automático ----------
+let borradorT = null;
+function guardarBorrador() {
+  try {
+    const d = { tipo: tipoActual() };
+    CAMPOS.forEach(c => { d[c] = $(c).value; });
+    if (CAMPOS.some(c => d[c].trim())) localStorage.setItem(CLAVE_BORRADOR, JSON.stringify(d));
+    else localStorage.removeItem(CLAVE_BORRADOR);
+  } catch (_) {}
+}
+function borrarBorrador() { clearTimeout(borradorT); try { localStorage.removeItem(CLAVE_BORRADOR); } catch (_) {} }
+function restaurarBorrador() {
+  try {
+    const d = JSON.parse(localStorage.getItem(CLAVE_BORRADOR) || "null");
+    if (!d || !CAMPOS.some(c => String(d[c] || "").trim())) return;
+    CAMPOS.forEach(c => { $(c).value = String(d[c] || "").slice(0, $(c).maxLength); });
+    (radios().find(r => r.value === d.tipo) || radios()[0]).checked = true;
+    actualizarContador();
+    $("borrador").classList.remove("hidden");
+  } catch (_) {}
+}
+$("form").addEventListener("input", () => { clearTimeout(borradorT); borradorT = setTimeout(guardarBorrador, 400); });
+document.addEventListener("visibilitychange", () => { if (document.hidden && !$("form").classList.contains("hidden")) guardarBorrador(); });
+$("borrador-no").addEventListener("click", () => {
+  borrarBorrador(); $("form").reset(); actualizarContador(); $("borrador").classList.add("hidden");
+});
+
+// ---------- Errores: al público solo mensajes amables; el detalle va a la consola ----------
+function mensajePublico(error) {
+  const m = String((error && error.message) || "");
+  if (m.includes("limite_envios")) return "Has enviado varios casos seguidos. Espera unos minutos e inténtalo de nuevo.";
+  if (m.includes("caso_duplicado")) return "Ya hemos recibido un caso idéntico hace poco, no hace falta enviarlo otra vez.";
+  if (m.includes("datos_invalidos")) return "Revisa los campos: algún dato no es válido o es demasiado corto o largo.";
+  if (/fetch|network|failed/i.test(m)) return "No hay conexión con el servidor. Comprueba tu internet; tu borrador se ha guardado.";
+  return "No se pudo enviar el caso. Inténtalo de nuevo en unos minutos; tu borrador se ha guardado.";
+}
 
 $("form").addEventListener("submit", async e => {
   e.preventDefault();
@@ -125,11 +173,10 @@ $("form").addEventListener("submit", async e => {
   if ($("web").value) return;                                   // bot
   const datos = {
     usuario_discord: $("usuario").value.trim(),
-    tipo_reporte: document.querySelector('input[name="tipo"]:checked').value,
+    tipo_reporte: tipoActual(),
     titulo: $("titulo").value.trim(),
     descripcion: $("descripcion").value.trim(),
-    pruebas: $("pruebas").value.trim() || null,
-    estado: "Pendiente"
+    pruebas: $("pruebas").value.trim() || null
   };
   if (!datos.usuario_discord || !datos.titulo || !datos.descripcion)
     return mostrarAviso("Rellena tu usuario de Discord, el título y la descripción.");
@@ -141,28 +188,43 @@ $("form").addEventListener("submit", async e => {
   if (resta > 0) return mostrarAviso("Espera " + resta + " s antes de enviar otro caso.");
 
   $("enviar").disabled = true; $("enviar").textContent = "Enviando…";
-  const { data: numero, error } = await db.rpc("enviar_caso", {
-    p_usuario: datos.usuario_discord, p_tipo: datos.tipo_reporte, p_titulo: datos.titulo,
-    p_descripcion: datos.descripcion, p_pruebas: datos.pruebas
-  });
+  let numero = null, error = null;
+  try {
+    ({ data: numero, error } = await db.rpc("enviar_caso", {
+      p_usuario: datos.usuario_discord, p_tipo: datos.tipo_reporte, p_titulo: datos.titulo,
+      p_descripcion: datos.descripcion, p_pruebas: datos.pruebas
+    }));
+  } catch (err) { error = err; }
   $("enviar").disabled = false; $("enviar").textContent = "Enviar caso";
 
-  if (error) {
-    console.error(error);
-    return mostrarAviso(error.code === "PGRST202" || error.code === "42501"
-      ? "No se pudo enviar: falta crear la función en Supabase (ejecuta supabase.sql)."
-      : "No se pudo enviar el caso: " + error.message);
-  }
+  if (error) { console.error(error); return mostrarAviso(mensajePublico(error)); }
+
   try { localStorage.setItem("ultimo_envio", String(Date.now())); } catch (_) {}
+  $("form").reset(); actualizarContador(); borrarBorrador(); $("borrador").classList.add("hidden");
   $("numero").textContent = "#" + numero;
   $("form").classList.add("hidden"); $("exito").classList.remove("hidden");
   window.scrollTo({ top: 0, behavior: "smooth" });
+  $("exito").focus({ preventScroll: true });
+});
+
+// ---------- Pantalla de éxito ----------
+$("copiar").addEventListener("click", async () => {
+  const b = $("copiar");
+  try { await navigator.clipboard.writeText($("numero").textContent); b.textContent = "¡Copiado!"; }
+  catch (_) {
+    const r = document.createRange(); r.selectNodeContents($("numero"));
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    b.textContent = "Cópialo con Ctrl + C";
+  }
+  setTimeout(() => { b.textContent = "Copiar número"; }, 2500);
 });
 
 $("otro").addEventListener("click", () => {
-  $("form").reset(); $("contador").textContent = "0 / 2000";
+  $("form").reset(); actualizarContador(); mostrarAviso("");
   $("exito").classList.add("hidden"); $("form").classList.remove("hidden");
 });
+
+restaurarBorrador();
 </script>
 </body>
 </html>
