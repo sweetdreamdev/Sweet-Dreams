@@ -30,6 +30,9 @@
   .tipo input:checked + span { border-color: rgb(var(--c)); background: rgba(var(--c), .14); color: #fff; }
   .tipo input:focus-visible + span { outline: 2px solid #ff7a1a; outline-offset: 2px; }
   :focus-visible { outline: 2px solid #ff7a1a; outline-offset: 2px; }
+  .tab-btn { border-radius: .6rem; padding: .6rem 1rem; font-weight: 600; font-size: .9rem; color: #94a3b8; transition: background .15s, color .15s; }
+  .tab-btn:hover { color: #fff; }
+  .tab-btn[aria-selected="true"] { background: #1e2236; color: #fff; box-shadow: 0 0 0 1px #2a2f48; }
 </style>
 </head>
 <body class="text-slate-200 min-h-screen">
@@ -41,6 +44,12 @@
 
     <div id="error" class="hidden mb-5 rounded-lg border border-red-500/40 bg-red-500/10 text-red-200 text-sm px-4 py-3"></div>
 
+    <div role="tablist" aria-label="Qué quieres hacer" class="mb-5 grid grid-cols-2 gap-1 rounded-xl border border-line bg-panel/80 p-1">
+      <button id="tab-enviar" type="button" role="tab" aria-selected="true" aria-controls="vista-enviar" class="tab-btn">Enviar un caso</button>
+      <button id="tab-consultar" type="button" role="tab" aria-selected="false" aria-controls="vista-consultar" class="tab-btn">Consultar un caso</button>
+    </div>
+
+    <div id="vista-enviar" role="tabpanel">
     <div id="borrador" class="hidden mb-5 flex items-center justify-between gap-3 rounded-lg border border-line bg-panel/80 px-4 py-3 text-sm" role="status">
       <span class="text-slate-300">Hemos recuperado tu borrador.</span>
       <button id="borrador-no" type="button" class="whitespace-nowrap text-fx hover:underline">Descartar</button>
@@ -105,10 +114,86 @@
       <p class="text-slate-400 mt-2">Gracias. El staff lo revisará lo antes posible.</p>
       <p class="text-xs uppercase tracking-wider text-slate-500 mt-6">Tu número de caso</p>
       <div id="numero" class="mt-1 inline-block rounded-lg bg-base border border-line px-6 py-2 font-display text-5xl font-bold text-fx"></div>
-      <p class="text-sm text-slate-400 mt-3">Guárdalo por si necesitas consultar el caso con el staff.</p>
-      <button id="copiar" type="button" class="mt-4 rounded-lg border border-line hover:bg-raised px-4 py-2 text-sm font-medium">Copiar número</button>
+      <div id="bloque-codigo">
+        <p class="text-xs uppercase tracking-wider text-slate-500 mt-5">Tu código de seguimiento</p>
+        <div id="codigo" class="mt-1 inline-block rounded-lg bg-base border border-line px-5 py-2 font-mono text-2xl font-semibold tracking-widest text-white"></div>
+      </div>
+      <p class="text-sm text-slate-400 mt-3">Guarda el número y el código: los necesitas para ver el estado de tu caso y escribir al staff.</p>
+      <div class="mt-4 flex flex-wrap justify-center gap-2">
+        <button id="copiar" type="button" class="rounded-lg border border-line hover:bg-raised px-4 py-2 text-sm font-medium">Copiar número y código</button>
+        <button id="ir-consulta" type="button" class="rounded-lg bg-fx hover:bg-orange-400 text-black px-4 py-2 text-sm font-semibold transition-colors">Ver mi caso</button>
+      </div>
       <button id="otro" class="mt-6 block mx-auto rounded-lg border border-line hover:bg-raised px-5 py-2.5 text-sm font-medium">Enviar otro caso</button>
     </div>
+    </div><!-- /vista-enviar -->
+
+    <section id="vista-consultar" role="tabpanel" class="hidden">
+      <!-- Buscar -->
+      <div id="consulta-buscar" class="rounded-2xl border border-line bg-panel/80 backdrop-blur p-5 sm:p-8 space-y-5">
+        <div>
+          <h1 class="font-display text-4xl font-bold text-white leading-none">Consultar un caso</h1>
+          <p class="text-sm text-slate-400 mt-2">Escribe tu número de caso y tu código de seguimiento para ver cómo va.</p>
+        </div>
+        <form id="form-consulta" class="space-y-4" novalidate>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label for="c-numero" class="block text-sm font-medium text-slate-300 mb-1.5">Número de caso</label>
+              <input id="c-numero" class="campo" inputmode="numeric" maxlength="10" placeholder="Ej: 12" autocomplete="off">
+            </div>
+            <div>
+              <label for="c-codigo" class="block text-sm font-medium text-slate-300 mb-1.5">Código de seguimiento</label>
+              <input id="c-codigo" class="campo font-mono uppercase tracking-widest" maxlength="11" placeholder="XXXXX-XXXXX" autocomplete="off" spellcheck="false">
+            </div>
+          </div>
+          <p id="c-aviso" class="hidden text-sm text-red-300" role="alert"></p>
+          <button id="c-btn" type="submit" class="w-full rounded-lg bg-fx hover:bg-orange-400 disabled:opacity-60 disabled:cursor-not-allowed text-black font-display text-xl font-bold py-3 transition-colors">Consultar</button>
+        </form>
+        <div id="recientes" class="hidden pt-5 border-t border-line">
+          <p class="text-xs uppercase tracking-wider text-slate-500">Tus casos en este navegador</p>
+          <ul id="recientes-lista" class="mt-2 space-y-2"></ul>
+        </div>
+      </div>
+
+      <!-- Caso -->
+      <div id="consulta-caso" class="hidden rounded-2xl border border-line bg-panel/80 backdrop-blur p-5 sm:p-8 space-y-6">
+        <div>
+          <div class="flex flex-wrap items-center gap-2.5">
+            <span id="k-tipo"></span>
+            <span id="k-numero" class="text-xs text-slate-500"></span>
+          </div>
+          <h2 id="k-titulo" class="font-display text-3xl font-bold text-white leading-tight mt-3 break-words"></h2>
+        </div>
+
+        <div class="rounded-xl border border-line bg-base/60 p-4">
+          <div class="flex flex-wrap items-center gap-3">
+            <span class="text-xs uppercase tracking-wider text-slate-500">Estado</span>
+            <span id="k-estado"></span>
+          </div>
+          <div id="k-pasos" class="mt-4 flex gap-2"></div>
+          <p id="k-estado-info" class="mt-3 text-sm text-slate-300"></p>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between gap-3">
+            <h3 class="font-display text-2xl font-bold text-white leading-none">Conversación con el staff</h3>
+            <button id="k-refrescar" type="button" class="text-xs text-slate-400 hover:text-white underline">Actualizar</button>
+          </div>
+          <ul id="k-chat" class="mt-3 space-y-3 max-h-96 overflow-y-auto pr-1" aria-live="polite"></ul>
+
+          <form id="form-msg" class="mt-4 space-y-2" novalidate>
+            <label for="k-texto" class="sr-only">Tu mensaje para el staff</label>
+            <textarea id="k-texto" class="campo min-h-[5rem] resize-y" maxlength="1000" placeholder="Añade información o pregunta algo al staff…"></textarea>
+            <div class="flex items-center justify-between gap-3">
+              <span id="k-cont" class="text-xs text-slate-500">0 / 1000</span>
+              <button id="k-enviar" type="submit" class="rounded-lg bg-fx hover:bg-orange-400 disabled:opacity-60 disabled:cursor-not-allowed text-black font-display text-lg font-bold px-5 py-2 transition-colors">Enviar nota</button>
+            </div>
+            <p id="k-aviso" class="hidden text-sm text-red-300" role="alert"></p>
+          </form>
+        </div>
+
+        <button id="k-volver" type="button" class="rounded-lg border border-line hover:bg-raised px-4 py-2 text-sm font-medium">Consultar otro caso</button>
+      </div>
+    </section>
   </div>
 </div>
 
@@ -201,7 +286,14 @@ $("form").addEventListener("submit", async e => {
 
   try { localStorage.setItem("ultimo_envio", String(Date.now())); } catch (_) {}
   $("form").reset(); actualizarContador(); borrarBorrador(); $("borrador").classList.add("hidden");
-  $("numero").textContent = "#" + numero;
+  const num = (numero && typeof numero === "object") ? numero.numero : numero;
+  const cod = (numero && typeof numero === "object") ? numero.codigo : null;
+  $("numero").textContent = "#" + num;
+  $("codigo").textContent = cod ? formatoCodigo(cod) : "";
+  $("bloque-codigo").classList.toggle("hidden", !cod);
+  $("ir-consulta").classList.toggle("hidden", !cod);
+  if (cod) recordar(num, cod, datos.titulo);
+  casoNuevo = cod ? { n: num, c: cod } : null;
   $("form").classList.add("hidden"); $("exito").classList.remove("hidden");
   window.scrollTo({ top: 0, behavior: "smooth" });
   $("exito").focus({ preventScroll: true });
@@ -210,18 +302,187 @@ $("form").addEventListener("submit", async e => {
 // ---------- Pantalla de éxito ----------
 $("copiar").addEventListener("click", async () => {
   const b = $("copiar");
-  try { await navigator.clipboard.writeText($("numero").textContent); b.textContent = "¡Copiado!"; }
+  const cod = $("codigo").textContent;
+  const texto = "Caso " + $("numero").textContent + (cod ? " · Código: " + cod : "");
+  try { await navigator.clipboard.writeText(texto); b.textContent = "¡Copiado!"; }
   catch (_) {
-    const r = document.createRange(); r.selectNodeContents($("numero"));
+    const r = document.createRange(); r.selectNodeContents($("exito"));
     const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
     b.textContent = "Cópialo con Ctrl + C";
   }
-  setTimeout(() => { b.textContent = "Copiar número"; }, 2500);
+  setTimeout(() => { b.textContent = "Copiar número y código"; }, 2500);
+});
+$("ir-consulta").addEventListener("click", () => {
+  ver("consultar");
+  if (casoNuevo) consultar(casoNuevo.n, casoNuevo.c);
 });
 
 $("otro").addEventListener("click", () => {
   $("form").reset(); actualizarContador(); mostrarAviso("");
   $("exito").classList.add("hidden"); $("form").classList.remove("hidden");
+});
+
+// ---------- Consultar un caso: estado + chat con el staff ----------
+let casoNuevo = null, casoActual = null, pollT = null, nMsgs = -1;
+const ESTADOS = ["Pendiente", "En revisión", "Resuelto"];
+const ETIQUETA = { "Pendiente": "Pendiente", "En revisión": "En revisión", "Resuelto": "Solucionado" };
+const INFO_ESTADO = {
+  "Pendiente": "Tu caso está en cola. Un miembro del staff lo revisará lo antes posible.",
+  "En revisión": "El staff está revisando tu caso ahora mismo.",
+  "Resuelto": "El staff ha marcado tu caso como solucionado."
+};
+const BADGE_ESTADO = {
+  "Pendiente": "bg-slate-500/20 text-slate-200 ring-slate-400/40",
+  "En revisión": "bg-violet-500/20 text-violet-200 ring-violet-400/40",
+  "Resuelto": "bg-emerald-500/20 text-emerald-200 ring-emerald-400/40"
+};
+const BADGE_TIPO = {
+  "Queja": "bg-red-500/15 text-red-300 ring-red-500/40",
+  "Bug": "bg-yellow-400/15 text-yellow-300 ring-yellow-400/40",
+  "Otro": "bg-blue-500/15 text-blue-300 ring-blue-500/40"
+};
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const bonito = u => u ? u.charAt(0).toUpperCase() + u.slice(1) : "Staff";
+const normalizarCodigo = c => String(c || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+function formatoCodigo(c) { c = normalizarCodigo(c); return c.length === 10 ? c.slice(0, 5) + "-" + c.slice(5) : c; }
+const fechaHora = d => new Date(d).toLocaleString("es-ES", { dateStyle: "medium", timeStyle: "short" });
+const avisoC = t => { $("c-aviso").textContent = t; $("c-aviso").classList.toggle("hidden", !t); };
+const avisoK = t => { $("k-aviso").textContent = t; $("k-aviso").classList.toggle("hidden", !t); };
+
+function errorConsulta(error) {
+  const m = String((error && error.message) || "");
+  if (m.includes("limite_consultas")) return "Demasiados intentos fallidos. Espera unos minutos e inténtalo de nuevo.";
+  if (m.includes("limite_mensajes")) return "Estás enviando mensajes muy rápido. Espera un momento.";
+  if (m.includes("mensaje_invalido")) return "El mensaje no puede estar vacío ni superar los 1000 caracteres.";
+  if (/fetch|network|failed/i.test(m)) return "No hay conexión con el servidor. Inténtalo de nuevo.";
+  return "No se pudo completar la acción. Inténtalo de nuevo en unos minutos.";
+}
+
+// Casos enviados desde este navegador (para no tener que reescribir el código)
+function leerRecientes() {
+  try { return JSON.parse(localStorage.getItem("mis_casos") || "[]").filter(x => x && x.n && x.c).slice(0, 8); }
+  catch (_) { return []; }
+}
+function recordar(n, c, t) {
+  const lista = leerRecientes().filter(x => x.n !== Number(n));
+  lista.unshift({ n: Number(n), c: normalizarCodigo(c), t: String(t || "").slice(0, 120) });
+  try { localStorage.setItem("mis_casos", JSON.stringify(lista.slice(0, 8))); } catch (_) {}
+}
+function pintarRecientes() {
+  const l = leerRecientes();
+  $("recientes").classList.toggle("hidden", !l.length);
+  $("recientes-lista").innerHTML = l.map(x => `<li><button type="button" data-n="${x.n}" data-c="${esc(x.c)}"
+    class="w-full text-left rounded-lg border border-line bg-base hover:bg-raised px-3 py-2 text-sm">
+    <span class="font-display text-lg font-bold text-fx">#${x.n}</span> <span class="text-slate-300">${esc(x.t)}</span></button></li>`).join("");
+}
+$("recientes-lista").addEventListener("click", e => {
+  const b = e.target.closest("button[data-n]");
+  if (b) consultar(b.dataset.n, b.dataset.c);
+});
+
+function ver(vista) {
+  const consultando = vista === "consultar";
+  $("vista-enviar").classList.toggle("hidden", consultando);
+  $("vista-consultar").classList.toggle("hidden", !consultando);
+  $("tab-enviar").setAttribute("aria-selected", String(!consultando));
+  $("tab-consultar").setAttribute("aria-selected", String(consultando));
+  if (consultando) {
+    pintarRecientes();
+    if (casoActual) { refrescar(true); empezarSeguimiento(); }
+  } else detenerSeguimiento();
+}
+$("tab-enviar").addEventListener("click", () => ver("enviar"));
+$("tab-consultar").addEventListener("click", () => ver("consultar"));
+
+async function pedirCaso(n, c) {
+  const { data, error } = await db.rpc("consultar_caso", { p_numero: n, p_codigo: c });
+  if (error) throw error;
+  return data;
+}
+
+async function consultar(numero, codigo) {
+  avisoC("");
+  const n = parseInt(String(numero).replace(/\D/g, ""), 10), c = normalizarCodigo(codigo);
+  if (!n || c.length < 10) return avisoC("Introduce el número de caso y el código completos.");
+  $("c-btn").disabled = true; $("c-btn").textContent = "Consultando…";
+  try {
+    const data = await pedirCaso(n, c);
+    if (!data) return avisoC("No encontramos ningún caso con ese número y código. Revisa que estén bien escritos.");
+    casoActual = { n, c }; nMsgs = -1;
+    recordar(n, c, data.titulo);
+    pintarCaso(data);
+    $("consulta-buscar").classList.add("hidden"); $("consulta-caso").classList.remove("hidden");
+    empezarSeguimiento();
+  } catch (err) { console.error(err); avisoC(errorConsulta(err)); }
+  finally { $("c-btn").disabled = false; $("c-btn").textContent = "Consultar"; }
+}
+
+function burbuja(m) {
+  const mio = m.autor_tipo === "usuario";
+  return `<li class="flex ${mio ? "justify-end" : "justify-start"}">
+    <div class="max-w-[85%] rounded-xl px-3.5 py-2.5 border ${mio ? "bg-fx/15 border-fx/30" : "bg-raised border-line"}">
+      <div class="text-xs text-slate-400 mb-1">${mio ? "Tú" : esc(bonito(m.autor)) + " · Staff"} · ${esc(fechaHora(m.creado_en))}</div>
+      <p class="text-sm text-slate-100 whitespace-pre-wrap break-words">${esc(m.texto)}</p>
+    </div></li>`;
+}
+
+function pintarCaso(d) {
+  const estado = ESTADOS.includes(d.estado) ? d.estado : "Pendiente", idx = ESTADOS.indexOf(estado);
+  $("k-tipo").className = "px-3 py-1 rounded-full text-xs font-semibold ring-1 " + (BADGE_TIPO[d.tipo] || BADGE_TIPO.Otro);
+  $("k-tipo").textContent = d.tipo || "Otro";
+  $("k-numero").textContent = "#" + d.numero + " · enviado el " + fechaHora(d.creado_en);
+  $("k-titulo").textContent = d.titulo || "Sin título";
+  $("k-estado").className = "inline-flex items-center rounded-full px-3.5 py-1 text-sm font-semibold ring-1 " + BADGE_ESTADO[estado];
+  $("k-estado").textContent = ETIQUETA[estado];
+  $("k-estado-info").textContent = INFO_ESTADO[estado] + (estado === "Resuelto" && d.resuelto_en ? " (" + fechaHora(d.resuelto_en) + ")" : "");
+  $("k-pasos").innerHTML = ESTADOS.map((e, i) => `<div class="flex-1 text-center">
+      <div class="h-1.5 rounded-full ${i <= idx ? (idx === 2 ? "bg-emerald-400" : "bg-fx") : "bg-line"}"></div>
+      <p class="mt-2 text-xs ${i === idx ? "text-white font-semibold" : "text-slate-500"}">${ETIQUETA[e]}</p></div>`).join("");
+
+  const ms = Array.isArray(d.mensajes) ? d.mensajes : [];
+  const chat = $("k-chat"), previo = chat.scrollTop;
+  chat.innerHTML = ms.length ? ms.map(burbuja).join("")
+    : '<li class="text-sm text-slate-500 text-center py-6">Todavía no hay mensajes. Si quieres añadir información o preguntar algo, escríbelo aquí abajo: el staff lo verá.</li>';
+  if (ms.length !== nMsgs) { chat.scrollTop = chat.scrollHeight; nMsgs = ms.length; } else chat.scrollTop = previo;
+}
+
+async function refrescar(silencioso) {
+  if (!casoActual) return;
+  try { const d = await pedirCaso(casoActual.n, casoActual.c); if (d) pintarCaso(d); }
+  catch (err) { console.error(err); if (!silencioso) avisoK(errorConsulta(err)); }
+}
+function empezarSeguimiento() {
+  detenerSeguimiento();
+  pollT = setInterval(() => { if (!document.hidden) refrescar(true); }, 20000);   // se actualiza solo
+}
+function detenerSeguimiento() { clearInterval(pollT); pollT = null; }
+
+$("c-codigo").addEventListener("input", e => {
+  const c = normalizarCodigo(e.target.value).slice(0, 10);
+  e.target.value = c.length > 5 ? c.slice(0, 5) + "-" + c.slice(5) : c;
+});
+$("form-consulta").addEventListener("submit", e => { e.preventDefault(); consultar($("c-numero").value, $("c-codigo").value); });
+$("k-refrescar").addEventListener("click", () => { avisoK(""); refrescar(false); });
+$("k-texto").addEventListener("input", e => { $("k-cont").textContent = e.target.value.length + " / 1000"; });
+$("k-volver").addEventListener("click", () => {
+  casoActual = null; nMsgs = -1; detenerSeguimiento(); avisoK(""); avisoC("");
+  $("consulta-caso").classList.add("hidden"); $("consulta-buscar").classList.remove("hidden");
+  pintarRecientes();
+});
+
+$("form-msg").addEventListener("submit", async e => {
+  e.preventDefault(); avisoK("");
+  const texto = $("k-texto").value.trim();
+  if (!texto || !casoActual) return;
+  $("k-enviar").disabled = true; $("k-enviar").textContent = "Enviando…";
+  try {
+    const { data, error } = await db.rpc("enviar_mensaje_caso", { p_numero: casoActual.n, p_codigo: casoActual.c, p_texto: texto });
+    if (error) throw error;
+    if (!data) return avisoK("No se pudo verificar tu caso. Vuelve a consultarlo con tu número y código.");
+    $("k-texto").value = ""; $("k-cont").textContent = "0 / 1000";
+    await refrescar(true);
+  } catch (err) { console.error(err); avisoK(errorConsulta(err)); }
+  finally { $("k-enviar").disabled = false; $("k-enviar").textContent = "Enviar nota"; }
 });
 
 restaurarBorrador();
