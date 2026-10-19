@@ -74,8 +74,8 @@
             <span class="block text-center rounded-lg border border-line bg-base px-3 py-3 text-sm font-semibold text-slate-400 transition-colors">Queja</span></label>
           <label class="tipo cursor-pointer" style="--c:250,204,21"><input type="radio" name="tipo" value="Bug" class="sr-only">
             <span class="block text-center rounded-lg border border-line bg-base px-3 py-3 text-sm font-semibold text-slate-400 transition-colors">Bug</span></label>
-          <label class="tipo cursor-pointer" style="--c:59,130,246"><input type="radio" name="tipo" value="Otro" class="sr-only">
-            <span class="block text-center rounded-lg border border-line bg-base px-3 py-3 text-sm font-semibold text-slate-400 transition-colors">Otro</span></label>
+          <label class="tipo cursor-pointer" style="--c:59,130,246"><input type="radio" name="tipo" value="Sugerencia" class="sr-only">
+            <span class="block text-center rounded-lg border border-line bg-base px-3 py-3 text-sm font-semibold text-slate-400 transition-colors">Sugerencia</span></label>
         </div>
       </fieldset>
 
@@ -215,6 +215,21 @@ const actualizarContador = () => { $("contador").textContent = $("descripcion").
 const mostrarAviso = t => { $("aviso").textContent = t; $("aviso").classList.toggle("hidden", !t); };
 $("descripcion").addEventListener("input", actualizarContador);
 
+// Los textos de ayuda cambian según el tipo de caso
+const TEXTOS_TIPO = {
+  Queja:      { titulo: "Resume la queja en una frase",  desc: "Qué ocurrió, cuándo, dónde y quién estaba implicado…" },
+  Bug:        { titulo: "Describe el fallo en una frase", desc: "Qué pasó, qué esperabas que pasara y cómo se puede repetir…" },
+  Sugerencia: { titulo: "Resume tu idea en una frase",    desc: "Explica tu idea y cómo mejoraría el servidor…" }
+};
+function aplicarTipo() {
+  const t = TEXTOS_TIPO[tipoActual()];
+  if (!t) return;
+  $("titulo").placeholder = t.titulo; $("descripcion").placeholder = t.desc;
+}
+radios().forEach(r => r.addEventListener("change", aplicarTipo));
+$("form").addEventListener("reset", () => setTimeout(aplicarTipo, 0));
+aplicarTipo();
+
 // ---------- Borrador automático ----------
 let borradorT = null;
 function guardarBorrador() {
@@ -231,7 +246,9 @@ function restaurarBorrador() {
     const d = JSON.parse(localStorage.getItem(CLAVE_BORRADOR) || "null");
     if (!d || !CAMPOS.some(c => String(d[c] || "").trim())) return;
     CAMPOS.forEach(c => { $(c).value = String(d[c] || "").slice(0, $(c).maxLength); });
-    (radios().find(r => r.value === d.tipo) || radios()[0]).checked = true;
+    const tipoBorrador = d.tipo === "Otro" ? "Sugerencia" : d.tipo;     // borradores antiguos
+    (radios().find(r => r.value === tipoBorrador) || radios()[0]).checked = true;
+    aplicarTipo();
     actualizarContador();
     $("borrador").classList.remove("hidden");
   } catch (_) {}
@@ -339,7 +356,8 @@ const BADGE_ESTADO = {
 const BADGE_TIPO = {
   "Queja": "bg-red-500/15 text-red-300 ring-red-500/40",
   "Bug": "bg-yellow-400/15 text-yellow-300 ring-yellow-400/40",
-  "Otro": "bg-blue-500/15 text-blue-300 ring-blue-500/40"
+  "Sugerencia": "bg-blue-500/15 text-blue-300 ring-blue-500/40",
+  "Otro": "bg-blue-500/15 text-blue-300 ring-blue-500/40"      // casos antiguos
 };
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const bonito = u => u ? u.charAt(0).toUpperCase() + u.slice(1) : "Staff";
@@ -428,8 +446,8 @@ function burbuja(m) {
 
 function pintarCaso(d) {
   const estado = ESTADOS.includes(d.estado) ? d.estado : "Pendiente", idx = ESTADOS.indexOf(estado);
-  $("k-tipo").className = "px-3 py-1 rounded-full text-xs font-semibold ring-1 " + (BADGE_TIPO[d.tipo] || BADGE_TIPO.Otro);
-  $("k-tipo").textContent = d.tipo || "Otro";
+  $("k-tipo").className = "px-3 py-1 rounded-full text-xs font-semibold ring-1 " + (BADGE_TIPO[d.tipo] || BADGE_TIPO.Sugerencia);
+  $("k-tipo").textContent = d.tipo === "Otro" ? "Sugerencia" : (d.tipo || "Sugerencia");
   $("k-numero").textContent = "#" + d.numero + " · enviado el " + fechaHora(d.creado_en);
   $("k-titulo").textContent = d.titulo || "Sin título";
   $("k-estado").className = "inline-flex items-center rounded-full px-3.5 py-1 text-sm font-semibold ring-1 " + BADGE_ESTADO[estado];
